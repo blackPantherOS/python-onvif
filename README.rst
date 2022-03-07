@@ -7,9 +7,9 @@ Dependencies
 ------------
 `Python 3.1x` (another a Python 3 compatible fork, see https://github.com/FalkTannhaeuser/python-onvif-zeep)
 
-`suds <https://pypi.python.org/pypi/suds>`_ >= 0.4
+`suds <https://github.com/cackharot/suds-py3/>`_ >= 1.4.5 
 
-`suds-passworddigest <https://pypi.python.org/pypi/suds_passworddigest>`_
+`suds-passworddigest <https://github.com/tgaugry/suds-passworddigest-py3>`_ >= 0.1.2a
 
 Install python-onvif
 --------------------
