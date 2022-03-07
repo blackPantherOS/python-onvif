@@ -35,6 +35,8 @@ Initialize an ONVIFCamera instance
 
     from onvif import ONVIFCamera
     mycam = ONVIFCamera('192.168.0.2', 80, 'user', 'passwd', '/etc/onvif/wsdl/')
+    or
+    mycam = ONVIFCamera('192.168.0.2', 80, 'user', 'passwd', '') / for use wsdl on the default path: "/usr/lib/python3.x/*-packages/onvif/wsdl" /
 
 Now, an ONVIFCamera instance is available. By default, a devicemgmt service is also available if everything is OK.
 
@@ -108,7 +110,7 @@ ONVIFCamera has support methods to create new services::
 
 Or create an unofficial service::
 
-    xaddr = 'http://192.168.0.3:8888/onvif/yourservice'
+    addr = 'http://192.168.0.3:8888/onvif/yourservice'
     yourservice = mycam.create_onvif_service('service.wsdl', xaddr, 'yourservice')
     yourservice.SomeOperation()
     # Another way
@@ -152,8 +154,8 @@ Batch mode
 
 ::
 
-    $ vim batchcmds
-    $ cat batchcmds
+    Edit or view 'batchcmds' file:
+    $ `cat batchcmds`
     cmd devicemgmt GetWsdlUrl
     cmd devicemgmt SetHostname {'Name': 'NewHostname', 'FromDHCP': True}
     cmd devicemgmt GetHostname
