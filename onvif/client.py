@@ -1,8 +1,8 @@
 __version__ = '0.0.1'
 
 import os.path
-import urlparse
-import urllib
+import urllib.request, urllib.parse, urllib.error
+from urllib.parse import urlparse
 from threading import Thread, RLock
 
 import logging
@@ -19,8 +19,8 @@ from suds.bindings import binding
 binding.envns = ('SOAP-ENV', 'http://www.w3.org/2003/05/soap-envelope')
 
 from onvif.exceptions import ONVIFError
-from definition import SERVICES, NSMAP
-from suds.sax.date import UTC
+from onvif.definition import SERVICES, NSMAP
+#from suds.sax.date import *
 import datetime as dt
 # Ensure methods to raise an ONVIFError Exception
 # when some thing was wrong
@@ -40,17 +40,18 @@ class UsernameDigestTokenDtDiff(UsernameDigestToken):
     Please note that using NTP on both end is the recommended solution, 
     this should only be used in "safe" environements.
     '''
-    def __init__(self, user, passw, dt_diff=None) :
-#        Old Style class ... sigh ...
+
+    def __init__(self, user, passw, dt_diff=None):
+        #        Old Style class ... sigh ...
         UsernameDigestToken.__init__(self, user, passw)
         self.dt_diff = dt_diff
-        
+
     def setcreated(self, *args, **kwargs):
         dt_adjusted = None
-        if self.dt_diff :
+        if self.dt_diff:
             dt_adjusted = (self.dt_diff + dt.datetime.utcnow())
         UsernameToken.setcreated(self, dt=dt_adjusted, *args, **kwargs)
-        self.created = str(UTC(self.created))
+        self.created = self.created.isoformat()
 
 
 class ONVIFService(object):
@@ -85,7 +86,7 @@ class ONVIFService(object):
     '''
 
     @safe_func
-    def __init__(self, xaddr, user, passwd, url,
+    def __init__(self, addr, user, passwd, url,
                  cache_location='/tmp/suds', cache_duration=None,
                  encrypt=True, daemon=False, ws_client=None, no_cache=False, portType=None, dt_diff = None):
 
@@ -105,18 +106,19 @@ class ONVIFService(object):
 
 
         # Convert pathname to url
-        self.url = urlparse.urljoin('file:', urllib.pathname2url(url))
-        self.xaddr = xaddr
+        from urllib.parse import urljoin
+        self.url = urljoin('file:', urllib.request.pathname2url(url))
+        self.addr = addr
         # Create soap client
         if not ws_client:
             self.ws_client = Client(url=self.url,
-                                    location=self.xaddr,
+                                    location=self.addr,
                                     cache=cache,
                                     port=portType,
                                     headers={'Content-Type': 'application/soap+xml'})
         else:
             self.ws_client = ws_client
-            self.ws_client.set_options(location=self.xaddr)
+            self.ws_client.set_options(location=self.addr)
 
         # Set soap header for authentication
         self.user = user
@@ -127,9 +129,7 @@ class ONVIFService(object):
         self.daemon = daemon
 
         self.dt_diff = dt_diff
-
-        if self.user is not None and self.passwd is not None:
-            self.set_wsse()
+        self.set_wsse()
 
         # Method to create type instance of service method defined in WSDL
         self.create_type = self.ws_client.factory.create
@@ -232,13 +232,19 @@ class ONVIFCamera(object):
     >>> ptz_service.GetConfiguration()
     '''
 
-    def __init__(self, host, port ,user, passwd, wsdl_dir=os.path.join(os.path.dirname(os.path.dirname(__file__)), "wsdl"),
+    # Class-level variables
+    services_template = {'devicemgmt': None, 'ptz': None, 'media': None,
+                         'imaging': None, 'events': None, 'analytics': None }
+    use_services_template = {'devicemgmt': True, 'ptz': True, 'media': True,
+                         'imaging': True, 'events': True, 'analytics': True }
+
+    def __init__(self, host, port ,user, passwd, wsdl_dir=None,
                  cache_location=None, cache_duration=None,
                  encrypt=True, daemon=False, no_cache=False, adjust_time=False):
-        self.services_template = {'devicemgmt': None, 'ptz': None, 'media': None,
-                         'imaging': None, 'events': None, 'analytics': None }
-        self.use_services_template = {'devicemgmt': True, 'ptz': True, 'media': True,
-                         'imaging': True, 'events': True, 'analytics': True }
+
+        if not os.path.isdir(wsdl_dir) :
+                wsdl_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "wsdl")
+
         self.host = host
         self.port = int(port)
         self.user = user
@@ -255,12 +261,12 @@ class ONVIFCamera(object):
         self.services = { }
         self.services_lock = RLock()
 
-        # Set xaddrs
-        self.update_xaddrs()
+        # Set addrs
+        self.update_addrs()
 
         self.to_dict = ONVIFService.to_dict
 
-    def update_xaddrs(self):
+    def update_addrs(self):
         # Establish devicemgmt service first
         self.dt_diff = None
         self.devicemgmt  = self.create_devicemgmt_service()
@@ -271,20 +277,20 @@ class ONVIFCamera(object):
             self.devicemgmt.dt_diff = self.dt_diff
             self.devicemgmt.set_wsse()
         # Get XAddr of services on the device
-        self.xaddrs = { }
+        self.addrs = { }
         capabilities = self.devicemgmt.GetCapabilities({'Category': 'All'})
         for name, capability in capabilities:
             try:
                 if name.lower() in SERVICES:
                     ns = SERVICES[name.lower()]['ns']
-                    self.xaddrs[ns] = capability['XAddr']
+                    self.addrs[ns] = capability['XAddr']
             except Exception:
                 logger.exception('Unexcept service type')
 
         with self.services_lock:
             try:
                 self.event = self.create_events_service()
-                self.xaddrs['http://www.onvif.org/ver10/events/wsdl/PullPointSubscription'] = self.event.CreatePullPointSubscription().SubscriptionReference.Address
+                self.addrs['http://www.onvif.org/ver10/events/wsdl/PullPointSubscription'] = self.event.CreatePullPointSubscription().SubscriptionReference.Address
             except:
                 pass                
 
@@ -305,9 +311,9 @@ class ONVIFCamera(object):
         self.capabilities = self.devicemgmt.GetCapabilities()
 
         with self.services_lock:
-            for sname in self.services.keys():
-                xaddr = getattr(self.capabilities, sname.capitalize).XAddr
-                self.services[sname].ws_client.set_options(location=xaddr)
+            for sname in list(self.services.keys()):
+                addr = getattr(self.capabilities, sname.capitalize).XAddr
+                self.services[sname].ws_client.set_options(location=addr)
 
     def update_auth(self, user=None, passwd=None):
         changed = False
@@ -322,7 +328,7 @@ class ONVIFCamera(object):
             return
 
         with self.services_lock:
-            for service in self.services.keys():
+            for service in list(self.services.keys()):
                 self.services[service].set_wsse(user, passwd)
 
     def get_service(self, name, create=True):
@@ -333,7 +339,7 @@ class ONVIFCamera(object):
         return service
 
     def get_definition(self, name):
-        '''Returns xaddr and wsdl of specified service'''
+        '''Returns addr and wsdl of specified service'''
         # Check if the service is supported
         if name not in SERVICES:
             raise ONVIFError('Unknown service %s' % name)
@@ -346,27 +352,27 @@ class ONVIFCamera(object):
 
         # XAddr for devicemgmt is fixed:
         if name == 'devicemgmt':
-            xaddr = 'http://%s:%s/onvif/device_service' % (self.host, self.port)
-            return xaddr, wsdlpath
+            addr = 'http://%s:%s/onvif/device_service' % (self.host, self.port)
+            return addr, wsdlpath
 
         # Get other XAddr
-        xaddr = self.xaddrs.get(ns)
-        if not xaddr:
+        addr = self.addrs.get(ns)
+        if not addr:
             raise ONVIFError('Device doesn`t support service: %s' % name)
 
-        return xaddr, wsdlpath
+        return addr, wsdlpath
 
     def create_onvif_service(self, name, from_template=True, portType=None):
         '''Create ONVIF service client'''
 
         name = name.lower()
-        xaddr, wsdl_file = self.get_definition(name)
+        addr, wsdl_file = self.get_definition(name)
 
         with self.services_lock:
             svt = self.services_template.get(name)
             # Has a template, clone from it. Faster.
             if svt and from_template and self.use_services_template.get(name):
-                service = ONVIFService.clone(svt, xaddr, self.user,
+                service = ONVIFService.clone(svt, addr, self.user,
                                              self.passwd, wsdl_file,
                                              self.cache_location,
                                              self.cache_duration,
@@ -376,7 +382,7 @@ class ONVIFCamera(object):
             # No template, create new service from wsdl document.
             # A little time-comsuming
             else:
-                service = ONVIFService(xaddr, self.user, self.passwd,
+                service = ONVIFService(addr, self.user, self.passwd,
                                        wsdl_file, self.cache_location,
                                        self.cache_duration, self.encrypt,
                                        self.daemon, no_cache=self.no_cache, portType=portType, dt_diff=self.dt_diff)

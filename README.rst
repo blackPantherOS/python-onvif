@@ -1,11 +1,11 @@
 python-onvif
 ============
 
-ONVIF Client Implementation in Python
+ONVIF Client Implementation in Python3
 
 Dependencies
 ------------
-`Python 2.x` (For a Python 3 compatible fork, see https://github.com/FalkTannhaeuser/python-onvif-zeep)
+`Python 3.1x` (another a Python 3 compatible fork, see https://github.com/FalkTannhaeuser/python-onvif-zeep)
 
 `suds <https://pypi.python.org/pypi/suds>`_ >= 0.4
 
