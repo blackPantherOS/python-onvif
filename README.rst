@@ -111,7 +111,7 @@ ONVIFCamera has support methods to create new services::
 Or create an unofficial service::
 
     addr = 'http://192.168.0.3:8888/onvif/yourservice'
-    yourservice = mycam.create_onvif_service('service.wsdl', xaddr, 'yourservice')
+    yourservice = mycam.create_onvif_service('service.wsdl', addr, 'yourservice')
     yourservice.SomeOperation()
     # Another way
     # mycam.yourservice.SomeOperation()
